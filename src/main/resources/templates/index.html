@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>瀑布流懒加载</title>
+    <meta charset="utf-8">
+    <script>
+        // 使用jQuery处理:
+        function imgError(image){
+            $(image).attr("css", "display: none");
+            //$(image).attr("src", "http://pic.topmeizi.com/wp-content/uploads/2013a/12/40/04.jpg");
+        }
+    </script>
+</head>
+<link rel="stylesheet" href="css/viewer.css">
+<script src="js/jquery.min.js"></script>
+<script src="js/viewer.js"></script>
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        background: #383a41;
+    }
+
+    #container {
+        position: relative;
+    }
+
+    #container .box {
+        float: left;
+        padding: 5px;
+    }
+
+    #container .box-img {
+        padding: 5px;
+        border-radius: 5px;
+        box-shadow: 0 0 5px #ccc;
+        border: 1px solid #b8b8b8;
+    }
+
+    #container img {
+        width: 250px;
+        height: auto;
+    }
+</style>
+<body>
+<div id='container'>
+    <div class='box' th:each="picture,stat:${pictures}">
+        <div class='box-img'>
+            <img th:src="${picture}" onerror="imgError(this)"/>
+        </div>
+    </div>
+</div>
+
+<script>
+    /*
+    1.0-->实现图片的列数和浏览器宽度关联
+        内容显示区宽度/图片容器的宽度 = 列数
+    1.1-->图片居中 设置margin
+    2.0-->根据每一列最小的高度
+            -->把图片放在每一列高度最小高度图片的下方
+    2.1-->计算每一列最小高度
+            前5个元素不需要操作
+    3.0-->判断滚动条滚动到底部加载图片
+            滚动高度+可视区高度 > 加载最后一张图片距离浏览器顶部高度
+     */
+    var viewer = new Viewer(document.getElementById('container'), {
+        url: 'src',
+    });
+    var index = 41
+    var oParent = document.getElementById('container');//父元素
+    window.addEventListener('load', () => {//事件监听
+        imgLocation('box');
+        let _this = this
+        _this.addEventListener('scroll', () => {
+            if (checkLoading('box')) {
+                index+=5
+                $.get("/getPictures/"+index, function (result) {
+                    if (result.status === 200) {
+                        result.data.map((data)=>{
+                            const oDiv = document.createElement('div');
+                            oDiv.className = 'box';
+                            oParent.appendChild(oDiv);
+                            const oImg = document.createElement('div')
+                            oImg.className = 'box-img';
+                            oDiv.appendChild(oImg);
+                            const img = document.createElement('img')
+                            img.src = data;
+                            img.onerror = () =>{
+                                //return img.src = 'http://pic.topmeizi.com/wp-content/uploads/2013a/12/40/04.jpg'
+                                return img.css = 'display:none'
+                            }
+                            /*$(img).on('error',() => {
+                                $(img).attr('src','http://pic.topmeizi.com/wp-content/uploads/2013a/12/40/04.jpg')
+                            })*/
+                            oImg.appendChild(img);
+
+                            viewer.update()
+                            imgLocation('box');
+                        })
+                    }
+                })
+            }
+        });
+    });
+
+    function checkLoading(child) {
+        const oContent = getChilds(child);
+        const lastTop = oContent[oContent.length - 1].offsetTop;//最后一个图片距离浏览器的高度
+        const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;//滚动条高度
+        const pageHeight = document.documentElement.clientHeight || document.body.clientHeight;//可视区高度
+        if (scrollTop + pageHeight > lastTop) {
+            return true;
+        }
+    }
+
+    function imgLocation(child) {//把父元素所有符合条件的子元素取出来
+        const oContent = getChilds(child);
+        const imgWidth = oContent[0].offsetWidth;//图片宽度
+        const num = ~~(document.documentElement.clientWidth / imgWidth);//第二个取整方法使用~~
+        oParent.style.cssText = 'width:' + imgWidth * num + 'px; margin: 0 auto'; //使用cssText设置父元素样式
+        //计算图片高度
+        const heightArr = [];
+        [].map.call(oContent, (current, index) => {
+            if (index < 5) {
+                heightArr.push(current.offsetHeight);
+            } else {
+                //获取最小高度
+                const minHeight = Math.min(...heightArr);//扩展符...
+                const minIndex = getMinIndex(heightArr).index;//最小序列号
+                current.style.position = 'absolute';
+                current.style.top = minHeight + 'px';
+                current.style.left = oContent[minIndex].offsetLeft + 'px';
+
+                heightArr[minIndex] = heightArr[minIndex] + current.offsetHeight;//更新最小高度 = 已求出最小高度+当前最小高度
+            }
+        });
+    }
+
+    function getChilds(child) {//3.封装父元素下所有的子元素方法
+        const childArr = [];
+        const tagsAll = oParent.getElementsByTagName('*');//获取所有子元素
+        [].map.call(tagsAll, (current) => {//因为tagsAll是html集合不能直接使用,必须使用call方法传一个参数tagsAll,当前对象指代[](空数组)
+            if (current.className === child) {
+                childArr.push(current);
+            }
+        });
+        return childArr;
+    }
+
+    function getMinIndex(arr) {
+        return arr.reduce((a, b, index) => {
+            if (b <= a.val) {
+                a.val = b;
+                a.index = index;
+            }
+            return a;
+        }, {val: arr[0], index: 0});
+    }
+
+</script>
+</body>
+</html>
